@@ -5,7 +5,10 @@ pyqtcv est une librairie personnelle rassemblant des classes et fonctions utiles
 
 ### Installation 
 
-Soit dans un répertoire de son choix : 
+Soit dans un répertoire de son choix :   
+cd /dir/to/use/   
+sudo wget -4 -N   
+
 
 L'appel se fait alors dans le code sous la forme :   
 sys.path.insert(0,'/home/user') # si pas path système
