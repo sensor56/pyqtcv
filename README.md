@@ -10,8 +10,8 @@ sys.path.insert(0,'/home/user') # si pas path système
 from pyqtcv import * # importe librairie perso comportant fonctions utiles pour utiliser opencv avec pyqt
 
 Soit dans répertoire Python système : 
-cd /usr/lib/python2.7/dist-packages
-sudo wget -4 -N 
+cd /usr/lib/python2.7/dist-packages   
+sudo wget -4 -N   
 
 
 ### Fonctions disponibles 
