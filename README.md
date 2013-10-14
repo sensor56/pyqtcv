@@ -1,7 +1,7 @@
 pyqtcv
 ======
 
-pyqtcv est une librairie personnelle rassemblant des classes et fonctions utiles pour l'utilisation d'OpenCV avec PyQt, facilitant la mise en place d'interfaces de traitement d'image fixes ou à partir d'un flux vidéo de webcam. 
+pyqtcv est une librairie personnelle rassemblant des classes et fonctions utiles pour l'utilisation d'OpenCV avec PyQt, facilitant la mise en place d'interfaces de traitement d'images fixes ou à partir d'un flux vidéo de webcam. 
 
 ### Installation 
 
