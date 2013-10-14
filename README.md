@@ -11,7 +11,7 @@ sudo wget -4 -N
 
 
 L'appel se fait alors dans le code sous la forme :   
-sys.path.insert(0,'/home/user') # si pas path système
+sys.path.insert(0,'/home/user') # si pas path système   
 from pyqtcv import * # importe librairie perso comportant fonctions utiles pour utiliser opencv avec pyqt
 
 Soit dans répertoire Python système :   
