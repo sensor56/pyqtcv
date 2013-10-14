@@ -7,7 +7,7 @@ pyqtcv est une librairie personnelle rassemblant des classes et fonctions utiles
 
 Soit dans un répertoire de son choix :   
 cd /dir/to/use/   
-sudo wget -4 -N   
+sudo wget -4 -N https://raw.github.com/sensor56/pyqtcv/master/pyqtcv.py
 
 
 L'appel se fait alors dans le code sous la forme :   
@@ -16,7 +16,7 @@ from pyqtcv import * # importe librairie perso comportant fonctions utiles pour 
 
 Soit dans répertoire Python système :   
 cd /usr/lib/python2.7/dist-packages   
-sudo wget -4 -N   
+sudo wget -4 -N https://raw.github.com/sensor56/pyqtcv/master/pyqtcv.py
 
 
 L'appel se fait alors dans le code sous la forme :   
