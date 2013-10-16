@@ -22,7 +22,7 @@ sudo wget -4 -N https://raw.github.com/sensor56/pyqtcv/master/buffers.py
 
 
 L'appel se fait alors dans le code sous la forme :   
-from pyqtcv import * # importe librairie perso comportant fonctions utiles pour utiliser opencv avec pyqt
+from pyqtcv import * # importe librairie perso comportant fonctions utiles pour utiliser opencv avec pyqt   
 import buffers 
 
 ### Fonctions disponibles 
