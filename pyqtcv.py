@@ -15,7 +15,7 @@ from PyQt4.QtCore import * # inclut QTimer..
 import os,sys
 from cv2 import * # importe module OpenCV - cv est un sous module de cv2
 
-import buffers # importe les buffers OpenCV utiles pour pyqtcv
+import bufferscv as buffers # importe les buffers OpenCV utiles pour pyqtcv
 # voir : http://docs.python.org/2/faq/programming.html#how-do-i-share-global-variables-across-modules 
 
 # --- classes utiles (à placer avant la classe principale) --- 
