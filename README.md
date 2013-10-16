@@ -13,7 +13,8 @@ sudo wget -4 -N https://raw.github.com/sensor56/pyqtcv/master/bufferscv.py
 
 L'appel se fait alors dans le code sous la forme :   
 sys.path.insert(0,'/home/user') # si pas path système   
-from pyqtcv import * # importe librairie perso comportant fonctions utiles pour utiliser opencv avec pyqt
+from pyqtcv import * # importe librairie perso comportant fonctions utiles pour utiliser opencv avec pyqt   
+import bufferscv as buffers 
 
 Soit dans répertoire Python système :   
 cd /usr/lib/python2.7/dist-packages   
