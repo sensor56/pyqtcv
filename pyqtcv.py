@@ -15,6 +15,7 @@ from PyQt4.QtCore import * # inclut QTimer..
 import os,sys
 from cv2 import * # importe module OpenCV - cv est un sous module de cv2
 import time # pour millis
+import math # fonction math 
 
 import bufferscv as buffers # importe les buffers OpenCV utiles pour pyqtcv
 # voir : http://docs.python.org/2/faq/programming.html#how-do-i-share-global-variables-across-modules 
@@ -54,6 +55,19 @@ A class for converting iplimages to qimages
 
 # -- fin class IplToQImage
 
+#=== classes generales geometrie ==
+#=========== Classe Blob =================
+class Point: # cette classe definit un point par x et y 
+	
+	def __init__(self, *args ): # forme (x,y) ou x,y
+		
+		if len(args)==1: # si recoit tuple (x,y)
+			self.x=args[0][0]
+			self.y=args[0][1]
+		elif len(args)==2: # si recoit x,y
+			self.x=args[0]
+			self.y=args[1]
+		
 #----- fonction d'initialisation / création des buffers OpenCV utiles	
 def allocate(widthIn, heightIn):
 	
@@ -73,6 +87,8 @@ def allocate(widthIn, heightIn):
 	
 	#--- création d'un buffer principal RGB utilisé par les fonctions 
 	buffers.RGB=cv.CreateImage(mySize, cv.IPL_DEPTH_8U, 3) # buffer principal 3 canaux 8 bits non signés - RGB --
+	
+	buffers.Memory=cv.CreateImage(mySize, cv.IPL_DEPTH_8U, 3) # buffer principal 3 canaux 8 bits non signés - RGB --
 	
 	#--- crée 3 buffers 1 canal 8 bits non signés = 1 canal par couleur 
 	buffers.R = cv.CreateImage(mySize, cv.IPL_DEPTH_8U, 1) #1 canal - canal rouge
@@ -125,6 +141,45 @@ def display(iplImageIn, qLabelIn):
 	qLabelIn.setPixmap(buffers.qPixmap) # affiche l'image dans le label 
 ## fin display 
 """
+
+############### gestion des buffers et images entre-elles ##############
+
+#-- copie image
+def copyTo(iplImgSrcIn, iplImgDestIn):
+	cv.Copy(iplImgSrcIn, iplImgDestIn) # copie l'image de départ image destination
+##-- fin copyTo
+
+#-- redimensionnement d'une image vers une autre - l'image destination sert de reference
+def resize(iplImgSrcIn, iplImgDestIn):
+	cv.Resize(iplImgSrcIn,iplImgDestIn, cv.CV_INTER_LINEAR) # redimensionne image
+##-- fin resize
+
+#-- mémorise image dans buffer Memory -- 
+def remember(*arg):
+	
+	if len(arg)==0: # buffer RGB par defaut
+		iplImgIn=buffers.RGB
+	elif len(arg)==1: # si iplImage passe en parametre
+		iplImgIn=arg[0]
+	
+	cv.Copy(iplImgIn, buffers.Memory) # copie l'image dans le buffer Memory
+	
+# fin remember
+
+#-- récupère image dans buffer Memory -- 
+def getMemory(*arg):
+	
+	if len(arg)==0: # buffer RGB par defaut
+		iplImgIn=buffers.RGB
+	elif len(arg)==1: # si iplImage passe en parametre
+		iplImgIn=arg[0]
+	
+	cv.Copy(buffers.Memory,iplImgIn) # copie l'image dans le buffer Memory
+	
+# fin remember
+
+
+############## fonctions de traitement des pixels #####################
 
 #---- conversion gray d'une image RGB 3 canaux ----
 def gray(*arg):
@@ -270,15 +325,6 @@ def mixerRGB (iplImgRGBIn, coeffRIn, coeffGIn, coeffBIn, grayOut):
 # fin mixerRGB
 
 
-#-- redimensionnement d'une image vers une autre - l'image destination sert de reference
-def resize(iplImgSrcIn, iplImgDestIn):
-	cv.Resize(iplImgSrcIn,iplImgDestIn, cv.CV_INTER_LINEAR) # redimensionne image
-##-- fin resize
-
-#-- copie image
-def copyTo(iplImgSrcIn, iplImgDestIn):
-	cv.Copy(iplImgSrcIn, iplImgDestIn) # copie l'image de départ image destination
-##-- fin copyTo
 
 """ # probleme avec self
 # fonction de sélection fichier
@@ -384,7 +430,7 @@ class Blob: # cette classe rassemble dans un meme objet toutes les caractéristi
 	def __init__(self, indiceContourIn, contourIn, areaIn, lengthArcIn, lengthIn, centroidPointIn, rectIn, pointsIn): 
 		# indiceContourIn, float areaIn, float lengthArcIn, float lengthIn, Point centroidIn, Rectangle rectIn, Point[] pointsIn
 		self.indiceContour = indiceContourIn # indice du blob
-		self.contour=contourIn # le cvSeq du contour
+		self.contour=contourIn # le cvSeq du contour - autre possibilite = faire un cvSeq global et utiliser indice... mieux d'utiliser objet cvSeq du blob lui-meme.. 
 		self.area = areaIn # aire du blob
 		self.lengthArc=lengthArcIn # perimetre du blob
 		self.length=lengthIn # nombre de points du blob
@@ -393,12 +439,24 @@ class Blob: # cette classe rassemble dans un meme objet toutes les caractéristi
 		self.points=pointsIn # tableau de points du blob
 		
 
+	def infos(self):
+		print "------------------------------------"
+		print "indice:" + str(self.indiceContour)
+		print "aire:" + str(self.area)
+		print "perimetre:" + str(self.lengthArc)
+		print "nombre points:" + str(self.length)
+		print "centre:" + str(self.centroidPoint)
+		print "rectangle encadrant:" + str(self.rect)
+		#print "liste des points:" + str(self.points)
+		
 #========= Fonctions utilisant les Blobs ==========
 """
-    detectBlobs() w
-    drawBlobs() w
+	classe Blob - ok 
+    detectBlobs() - ok
+    drawBlobs() - ok 
     drawCentroidBlobs() w
     drawRectBlobs() w 
+    
     selectBlobs() w
     selectBallBlobs() w
     keypointsSBD() w 
@@ -417,7 +475,10 @@ def detectBlobs(*arg):
 	
 	# extraction de contours
 	storage = cv.CreateMemStorage(0)
-	contours = cv.FindContours(buffers.Gray, storage, cv.CV_RETR_CCOMP, cv.CV_CHAIN_APPROX_SIMPLE)
+	contours = cv.FindContours(buffers.Gray, storage, cv.CV_RETR_EXTERNAL, cv.CV_CHAIN_APPROX_SIMPLE)
+	
+	# cv.CV_RETR_EXTERNAL : seulement contour exterieur pas contour a l'interieur contour
+	# cv.CV_RETR_CCOMP : contours externe et contour interne en 2 hierarchies
 	
 	# creation d'une list d'objets Blob
 	blobsList=list()
@@ -444,17 +505,22 @@ def detectBlobs(*arg):
 		m00 = cv.GetSpatialMoment(moments, 0, 0) # recupere moment sous forme sous forme m00, m10.. 
 		m10 = cv.GetSpatialMoment(moments, 1, 0)
 		m01 = cv.GetSpatialMoment(moments, 0, 1)
-		centroid_x=int(m10/m00) # calcule x du centre
-		centroid_y=int(m01/m00) # calcule y du centre
-		centroidPoint=[(centroid_x, centroid_y)] # centre du blob
+		if m00!=0:
+			centroid_x=int(m10/m00) # calcule x du centre
+			centroid_y=int(m01/m00) # calcule y du centre
+			centroidPoint=(centroid_x, centroid_y) # centre du blob
+		else: 
+			centroidPoint=[(0,0)] # centre du blob
 		
-		#rect=[(0,0),(0,0)] # rectangle entourant le blob - coin sup gauche - coin inf droit 
-		bound_rect = cv.BoundingRect(list(contours)) # récupère le rectangles encadrant le contour courant
+		#rect=[(0,0),(0,0),w,h] # rectangle entourant le blob - coin sup gauche - coin inf droit 
+		bound_rect = cv.BoundingRect(list(contours)) # récupère le rectangles encadrant le contour courant - renvoit x,y,w,h
 		pt1 = (bound_rect[0], bound_rect[1]) # récupère le 1er point du rectangle encadrant
 		pt2 = (bound_rect[0] + bound_rect[2], bound_rect[1] + bound_rect[3]) # récupère le 2ème point du rectangle encadrant 
 		rect=[] # list des points
-		rect.append(pt1) # ajoute le point au tableau
-		rect.append(pt2) # ajoute le 2ème point au tableau
+		rect.append(pt1) # ajoute le point au tableau - coin sup gauche 
+		rect.append(pt2) # ajoute le 2ème point au tableau - coin inf gauche 
+		rect.append(float(bound_rect[2])) # la largeur
+		rect.append(float(bound_rect[3])) # la hauteur
 		
 		# list de spoints du contour
 		points=list(contours) # liste des points du contour courant
@@ -469,7 +535,198 @@ def detectBlobs(*arg):
 #-- fonction drawBlobs : dessine les blobs sur une image
 def drawBlobs(blobsIn, iplImgIn):
 	#while blobsIn:
-	for blob in blobs : # defile les Objets blobs pyqtcv obtenus
+	for blob in blobsIn : # defile les Objets blobs pyqtcv obtenus
 		# cv.DrawContours(img, contour, external_color, hole_color, max_level, thickness=1, lineType=8, offset=(0, 0))
 		cv.DrawContours(iplImgIn, blob.contour,cv.CV_RGB(255,255,0),cv.CV_RGB(255,255,0),1) # dessine tous les contours - laissés vide 
 		#cv.DrawContours(iplImgIn, blobsIn,cv.CV_RGB(255,255,0),cv.CV_RGB(0,255,0),1,-1) # dessine tous les contours - remplis - utilise CPU...
+
+#-- fonction drawCentroidBlobs : dessine le centre des blobs sur une image
+def drawCentroidBlobs(blobsIn, iplImgIn):
+	
+	for blob in blobsIn : # defile les Objets blobs pyqtcv obtenus
+		#cv.Circle(img, center, radius, color, thickness=1, lineType=8, shift=0) - thickness= -1 pour rempli
+		cv.Circle(buffers.RGB, blob.centroidPoint, 3, cv.CV_RGB(0,0,255), -1)
+
+#-- fonction drawRectBlobs : dessine le rectangle autour des blobs sur une image
+def drawRectBlobs(blobsIn, iplImgIn):
+	
+	for blob in blobsIn : # defile les Objets blobs pyqtcv obtenus
+		#cv.Rectangle(img, pt1, pt2, color, thickness=1, lineType=8, shift=0) - thickness= -1 pour rempli
+		cv.Rectangle(buffers.RGB,blob.rect[0], blob.rect[1], cv.CV_RGB(255,0,0), 1) 
+
+#-- fonction selectBlobs : selectionne des blobs sur criteres 
+def selectBlobsArea(blobsIn,areaMinIn):
+	
+	blobsOut=[]
+	
+	for blob in blobsIn : # defile les Objets blobs pyqtcv obtenus
+		
+		if blob.area>areaMinIn: # si le blob sup a aire voulue
+			blobsOut.append(blob) # ajoute le blob a la liste
+	
+	return blobsOut # renvoie la list des blobs sélectionnes
+
+#-- fonction selectBlobs : selectionne des blobs sur criteres 
+def selectBlobsWH(blobsIn,ratioWHTestIn, deltaIn):
+	
+	blobsOut=[]
+	
+	for blob in blobsIn : # defile les Objets blobs pyqtcv obtenus
+		
+		#print blob.rect[2] # debug
+		#print blob.rect[3] # debug
+		
+		ratioWH=blob.rect[2]/blob.rect[3]
+		#print ratioWH # debug
+		
+		if (ratioWH<(float(ratioWHTestIn)+(float(ratioWHTestIn)*float(deltaIn)/100.0))
+		and ratioWH>(float(ratioWHTestIn)-(float(ratioWHTestIn)*float(deltaIn)/100.0))
+			):
+			blobsOut.append(blob) # ajoute le blob a la liste
+	
+	return blobsOut # renvoie la list des blobs sélectionnes
+
+############# convexite ######################
+
+#=========== Classe Blob =================
+class ConvexityDefect: # cette classe rassemble dans un meme objet toutes les caractéristiques utiles d'un ConvexityDefect = un creux.. 
+	
+	def __init__(self, startPointIn, endPointIn, depthPointIn, depthValueIn ): 
+		self.startPoint = startPointIn # point de debut
+		self.endPoint = endPointIn # point de fin
+		self.depthPoint = depthPointIn # point de debut
+		self.depthValue = depthValueIn # point de debut
+		
+		self.distSE=distance(Point(startPointIn), Point(endPointIn))
+		self.distSD=distance(Point(startPointIn), Point(depthPointIn))
+		self.distDE=distance(Point(depthPointIn), Point(endPointIn))
+		
+		self.angleSDE=calculAngleAlKashi(self.distSD, self.distDE, self.distSE) # angle en degres
+
+	def infos(self):
+		print "------------------------------------"
+		print "point start:" + str(self.startPoint)
+		print "point end:" + str(self.endPoint)
+		print "point depth:" + str(self.depthPoint)
+		print "profondeur :" + str(self.depthValue)
+		
+		print "distance Start-End:"+ str(self.distSE)
+		print "distance Start-Depth:"+ str(self.distSD)
+		print "distance Depth-End:"+ str(self.distDE)
+		
+		print "angle Start - Depth - End :" + str(self.angleSDE)
+
+
+#=========== fonctions utiles ==========
+
+#------ convexPoint --------- 
+
+#-- dessin de points de convexité -- NB : la recherche des points de convexité est une étape préalable à la recherche des convexity defect - ici on dessine juste 
+def drawConvexPoints(blobsIn):
+	
+	# cette fonction dessine les points simplement.. pour le détection des convexityDefect, on utilisera la détection par indice - voir detectCnvexityDefects
+	
+	for blob in blobsIn : # defile les Objets blobs pyqtcv obtenus
+		storage = cv.CreateMemStorage(0) # crée un objet MemStorage utilisé par la fonction convexHull2
+		# cv.ConvexHull2(points, storage, orientation=CV_CLOCKWISE, return_points=0) → convexHull
+		convexPointsSeq=cv.ConvexHull2(blob.contour, storage, return_points=True) # renvoie les points de convexite du blob - objet renvoye est un CvSeq.. avec 1 seule liste de points
+		# si return_points=False : renvoie indice des points dans le cvSeq.. 
+		#print len(convexPoints) # nombre de points - debug
+
+		#print list(convexPoints) # conversion du cvSeq en list
+		convexPoints=list(convexPointsSeq) # pas indisp
+		
+		for point in convexPoints: # defile les points
+			#print point - debug 
+			cv.Circle(buffers.RGB, point, 5, cv.CV_RGB(0,255,0), 1) # dessine les points de convexite
+
+#---- convexity Defect --- 
+
+#-- fonction de détection dans UN blob qui renvoie un tableau de convexityDefect (= objet point start, end, depth et valeur depth)
+def detectConvexityDefects(blobIn): 
+	
+	# detection des convexity defects = se base sur la detection prealable des indices des points de convexite (et pas les points) 
+	storage = cv.CreateMemStorage(0) # crée un objet MemStorage utilisé par la fonction convexHull2
+	convexIndicePointsSeq=cv.ConvexHull2(blobIn.contour, storage, return_points=False) # renvoie les points de convexite du blob - objet renvoye est un CvSeq.. avec 1 seule liste d'indice
+	#print len(convexIndicePointsSeq) # nombre de points - debug 
+	#print list(convexIndicePointsSeq) # conversion du cvSeq en list - debug 
+	
+	# cv.ConvexityDefects(contour, convexhull, storage) → convexityDefects
+	convexityDefectsSeq=cv.ConvexityDefects(blobIn.contour, convexIndicePointsSeq, storage) # renvoie la sequence des convexity defects
+	# print len(convexityDefectsSeq) - debug 
+	convexityDefectsList=list(convexityDefectsSeq) # conversion en liste
+	
+	convexityDefectsOut=list() # creation list pour objets convexityDefect
+	
+	for defect in convexityDefectsList: # defile les convexity defect 
+		#print defect - debug 
+		# chaque convexity defect est defini par un point de start, un point de creux , un point de end et la hauteur du creux !
+		
+		cd=ConvexityDefect(defect[0], defect[1], defect[2], defect[3]) # defini objet ConvexityDefect
+		#cd.infos() # debug
+		
+		convexityDefectsOut.append(cd) # ajoute à la list d'objet convexityDefect
+		
+	# fin for defect
+	
+	#print convexityDefectsOut # affiche la liste de tous les convexity defect - debug 
+	return convexityDefectsOut
+
+def drawConvexityDefects(convexityDefectsIn): # dessine un tableau de convexityDefects obtenu avec la fonction detectConvexityDefect
+	
+	for cd in convexityDefectsIn: # defile les objets convexity Defect de la list
+		cv.Circle(buffers.RGB, cd.startPoint, 5, cv.CV_RGB(0,255,0), 1)
+		cv.Circle(buffers.RGB, cd.endPoint, 5, cv.CV_RGB(255,0,0), 1)
+		cv.Circle(buffers.RGB, cd.depthPoint, 5, cv.CV_RGB(0,0,255), 1)
+		
+		#cv.Line(img, pt1, pt2, color, thickness=1, lineType=8, shift=0)
+		cv.Line(buffers.RGB, cd.startPoint, cd.depthPoint, cv.CV_RGB(255,0,255), thickness=2, lineType=8, shift=0)
+		cv.Line(buffers.RGB, cd.depthPoint, cd.endPoint, cv.CV_RGB(255,0,255), thickness=2, lineType=8, shift=0)
+		cv.Line(buffers.RGB, cd.endPoint, cd.startPoint, cv.CV_RGB(255,0,255), thickness=2, lineType=8, shift=0)
+	
+
+#-- fonction selectConvexityDefects : selectionne des convexityDefects sur critere de profondeur
+def selectConvexityDefectsDepth(convexityDefectsIn,depthMinIn):
+	
+	convexityDefectsOut=[]
+	
+	for cd in convexityDefectsIn : # defile les Objets blobs pyqtcv obtenus
+		
+		if cd.depthValue>depthMinIn: # si le convexityDefect a une profondeur sup au minimum
+			convexityDefectsOut.append(cd) # ajoute le convexityDefect a la liste
+	
+	return convexityDefectsOut # renvoie la list des blobs sélectionnes
+
+########################## Fonctions Geometrie 2D ###########################
+
+#--- calcul de la distance entre 2 points -- 
+def distance(pointStartIn, pointEndIn): 
+	
+	calcX=math.pow((pointEndIn.x-pointStartIn.x),2)
+	calcY=math.pow((pointEndIn.y-pointStartIn.y),2)
+	
+	distanceOut=math.sqrt(calcX+calcY)
+	
+	return distanceOut
+
+#--- calcule de l'angle d'un triangle quelqconque a partir des 3 cotes ---
+def calculAngleAlKashi(adj1, adj2, opp): 
+	
+	#avec :
+	# adj1 et adj2 la longueur des 2 cotés adjacents à l'angle à calculer
+	# opp la longueur du coté opposé à l'angle à calculer
+	
+	#----------- calcul du dénominateur : (adj1² + adj2² - opp²) ---------
+	
+	D=float(math.pow(adj1,2) + math.pow (adj2,2) - math.pow(opp,2))
+	 
+	# ----------- calcul du numérateur :  (2 x adj1 x adj2) ---------------
+	N=2.0*adj1*adj2
+	
+	#-------------- calcul final de l'angle ----------------------------
+
+	calculAngleRad=math.acos(D/N) # calcule l'angle en radians 
+	calculAngle=math.degrees(calculAngleRad) # conversion en degres
+	
+	#----- renvoi de la valeur calculée ----
+	return calculAngle
