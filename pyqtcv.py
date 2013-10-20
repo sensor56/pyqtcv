@@ -211,7 +211,13 @@ def flip (iplImgIn, flipModeIn):
 ##--- fin flip()
 
 #-- fonction d'inversion d'une image RGB -- 
-def invert(iplImgIn):
+def invert(*arg):
+	
+	if len(arg)==0: # buffer RGB par defaut
+		iplImgIn=buffers.RGB
+	elif len(arg)==1: # si iplImage passe en parametre
+		iplImgIn=arg[0]
+	
 	myRGB = cv.CV_RGB(255, 255, 255) # crée scalaire de 3 valeurs
 	cv.SubRS(iplImgIn, myRGB,iplImgIn,None) # soustraction inverse du scalaire pour tous les pixels
 
@@ -422,7 +428,223 @@ def millis():
 def micros():
 	return(int(round(time.time() * 1000000))) # microsecondes de l'horloge système
 
-########## blobs #########
+############ Filtres de contours #################
+
+#-- filtre de Canny -- 
+def canny( *args):
+	# iplImgIn,threshold1In, threshold2In, ksizeIn
+	
+	# gestion de parametres 
+	if len(args)==0: # si aucun parametre
+		iplImgIn=buffers.RGB
+		threshold1In=100
+		threshold2In=200
+		ksizeIn=3
+	elif len(args)==1: # si iplImgIn seul
+		iplImgIn=args[0]
+		threshold1In=100
+		threshold2In=200
+		ksizeIn=3
+	#elif args==4: # si forme complète 
+	else: # si forme complète - else pour eviter erreur "before assignment"
+		iplImgIn=args[0]
+		threshold1In=args[1]
+		threshold2In=args[2]
+		ksizeIn=args[3]
+	
+	# application du filtre Canny 
+	cv.CvtColor(iplImgIn, buffers.Gray, cv.CV_RGB2GRAY) # bascule l'image 3 canaux en niveaux de gris dans le buffer Gray 
+	
+	cv.Canny(buffers.Gray, buffers.Gray, threshold1In, threshold2In, ksizeIn)
+	
+	cv.CvtColor(buffers.Gray, iplImgIn, cv.CV_GRAY2RGB) # rebascule le buffer Gray en RGB 
+
+#-- filtre de Sobel -- 
+def sobel(*args):
+	# iplImgIn, ksizeIn, scaleIn
+
+	# gestion de parametres 
+	if len(args)==0: # si aucun parametre
+		iplImgIn=buffers.RGB
+		ksizeIn=3
+		scaleIn=1
+	else: # si forme complète - else pour eviter erreur "before assignment"
+		iplImgIn=args[0]
+		ksizeIn=args[1]
+		scaleIn=args[2]
+	
+	#--- ici, on calcule d'une part le Sobel Gx puis le Sobel Gy
+	#--- le passage par les 2 canaux séparés donne un bien meilleur résultat que Sobel 1,1 pour x et y simultanés 
+
+	#cv.Sobel(opencv_core.CvArr src, opencv_core.CvArr dst, int xorder, int yorder, int aperture_size) 
+	# où :
+	# src et dst sont 2 images IplImage source et destination - nécessite une source en 8U et une destination en 16S... 
+	# xorder : à 1 si Sobel horizontal
+	# yorder : à 1 si Sboel vertical
+	# aperture_size = taille du noyau utilisé - fixé par paramètre KsizeIn reçu par la fonction 
+
+	# NB : La fonction cvSobel effectue un Sobel Normalisé çàd divise coeff  noyau / taille noyau
+	# pour Sobel avec noyau non normalisé, voir SobelBrut() de cette librairie 
+
+	# le paramètre scaleIn joue comme un coeff faisant varier l'intensité du pourtour - utilisé pour basculer de 16S vers 8U
+	
+	#--- Sobel horizontal -- 
+	cv.Sobel(iplImgIn, buffers.Trans16S3C, 1,0,ksizeIn) # applique une détection contour par filtre Sobel horizontal
+	#--- attention le Sobel nécessite une source en 8U et une destination en 16S... 
+
+	#--- Sobel vertical -- 
+	cv.Sobel(iplImgIn, buffers.Trans16S3C2, 0,1,ksizeIn) # applique une détection contour par filtre Sobel vertical
+	#--- attention le Sobel nécessite une source en 8U et une destination en 16S... 
+
+	#--- ensuite reconvertit l'image destination en 8 bits avec la fonction cvConvertScale
+	#--- le sobel détecte des fronts en positif et en négatif : pour les prendre en compte, valeur absolue obligatoire
+
+	cv.ConvertScaleAbs(buffers.Trans16S3C,buffers.Trans8U3C,scaleIn,0) # scale fixé par la fonction - pas de shift 
+	cv.ConvertScaleAbs(buffers.Trans16S3C2,buffers.Trans8U3C2,scaleIn,0) # scale fixé par la fonction - pas de shift
+	# NB : cvConvertScaleAbs() utilise obligatoirement une destination en 8U càd 8 bits non signés
+
+
+	#--- addition des 2 images dans la même ----- 
+	cv.Add(buffers.Trans8U3C, buffers.Trans8U3C2, iplImgIn, None) # additionne les 2 dans Sobel vertical et horizontal 
+	 
+
+	return iplImgIn 
+
+#--- sobel v2 - par circonvolution
+def sobel2(*args):
+	#sobel2 (iplImgIn, int ksizeIn, float scaleIn, float coeffNormIn) # par defaut buffers.RGB,3,1,1
+	
+		# gestion de parametres 
+	if len(args)==0: # si aucun parametre
+		iplImgIn=buffers.RGB
+		ksizeIn=3
+		scaleIn=1
+		coeffNormIn=1.0
+	else: # si forme complète - else pour eviter erreur "before assignment"
+		iplImgIn=args[0]
+		ksizeIn=args[1]
+		scaleIn=args[2]
+		coeffNormIn=args[3]
+	
+	#--- ici, on calcule d'une part le Sobel Gx puis le Sobel Gy
+	#--- le passage par les 2 canaux séparés donne un bien meilleur résultat que Sobel 1,1 pour x et y simultanés 
+
+	#--- initialisation des objets utiles pour le traitement d'image par noyau de convolution 
+
+	#kernelSize=3 # pour kernel 3x3
+	kernelSize=ksizeIn # pour kernel nxn
+
+	value=0.0 # variable calcul kernel normalisé 
+	# pour chaque élément du kernel (i,j), on aura : value = (1/kernelSize x kernelSize) * kernel[i][j] 
+
+	#coeffNorm=4.0 # coeff pour accentuer le pourtour (= effectuer normalisation partielle du noyau..)
+	# coeffNormIn est reçu en paramètre 
+
+	#--- création d'une matrice 2D pour le noyau, de taille kernelSize x kernelSize et de type Float 
+	# cv.CreateMat(rows, cols, type) → mat
+	matrix2D= cv.CreateMat(kernelSize, kernelSize, cv.CV_32F) # crée un Cv Mat avec même taille de donnée unitaire
+
+	#*************** chargement de l'image dans un buffer 16S ******************************
+	cv.ConvertScale(iplImgIn, buffers.Trans16S3C, 256.0, -32768) # convertit 8U en 16S
+
+
+	#******************* application du noyau Sobel x **********************
+
+	#--- définition du noyau de convolution à utiliser ---
+
+	# --- kernel 3x3 Sobel x --  
+	kernelGx = ([[+1,0,-1], # déclaration des valeurs entières à utiliser
+				[+2,0,-2],
+				[+1,0,-1]]
+				)
+	
+	"""
+	print kernelGx
+	for ligne in kernelGx:
+		for valeur in ligne:
+			print valeur
+	"""
+	
+	"""
+	print kernelGx
+	for i in range(len(kernelGx)):
+		for j in range(len(kernelGx[0])):
+			print kernelGx[i][j]
+	"""
+	
+	
+	#---- remplissage du kernel Gx----
+	for i in range(len(kernelGx)):
+		for j in range(len(kernelGx[0])):
+			
+			value=coeffNormIn * kernelGx[i][j] / (kernelSize*kernelSize) # calcul valeur normalisée du kernel - coeffNorm atténue la normalisation et accentue le contour
+			# value=valeur; // si utilisation de la valeur non normalisée. Peut donner meilleur résultat dans certains cas... cf Sobel
+			#print value # debug 
+			
+			#cv.Set2D(opencv_core.CvArr arr, int idx0, int idx1, opencv_core.CvScalar value) 
+			cv.Set2D(matrix2D, i, j, cv.ScalarAll(value)) # remplit le CvMat à l'index (i,j) voulu  avec la valeur normalisée
+
+	#--- application du noyau normalisé à l'image source --- 
+	#cv.Filter2D(opencv_core.CvArr src, opencv_core.CvArr dst, opencv_core.CvMat kernel, opencv_core.CvPoint anchor) 
+	cv.Filter2D(buffers.Trans16S3C, buffers.Trans16S3C1, matrix2D, (-1,-1)) 
+
+
+	#******************* application du noyau Sobel y **********************
+
+	# --- kernel 3x3 Sobel y --  
+	kernelGy = ([[+1,2,+1], # déclaration des valeurs entières à utiliser
+				[0,0,0],
+				[-1,-2,-1]]
+				)
+
+	#---- remplissage du kernel Gy----
+	for i in range(len(kernelGy)):
+		for j in range(len(kernelGy[0])):
+	   
+			value=coeffNormIn * kernelGy[i][j] / (kernelSize*kernelSize) # calcul valeur normalisée du kernel - coeffNorm atténue la normalisation et accentue le contour
+			#value=kernelGy[i][j]; // si utilisation de la valeur non normalisée. Peut donner meilleur résultat dans certains cas... cf Sobel
+			#print value # debug 
+			
+			#cv.Set2D(opencv_core.CvArr arr, int idx0, int idx1, opencv_core.CvScalar value) 
+			cv.Set2D(matrix2D, i, j, cv.ScalarAll(value)) # remplit le CvMat à l'index (i,j) voulu  avec la valeur normalisée
+
+	#--- application du noyau normalisé à l'image source --- 
+	#static void cvFilter2D(opencv_core.CvArr src, opencv_core.CvArr dst, opencv_core.CvMat kernel, opencv_core.CvPoint anchor) 
+	cv.Filter2D(buffers.Trans16S3C, buffers.Trans16S3C2, matrix2D, (-1,-1)) 
+
+
+	#******************* application des Sobel x et y dans une même image **********************  
+
+	#---- combinaison des 2 gradients sobel vertical et horizontal dans la même image 
+	#static void cvAdd(opencv_core.CvArr src1, opencv_core.CvArr src2, opencv_core.CvArr dst, opencv_core.CvArr mask)  
+	# théoriquement, il faut faire sqrt(Gx² + Gy²)
+	# en pratique on peut approximer à |Gx|+|Gy|
+
+	# NB : filter2D renvoie des images 8U non signés si on utilise des image 8U pour le filtre
+	# donc on "perd" les valeurs négatives fournies par le Sobel : appliquer par conséquent le Sobel sur valeur 16S
+
+	cv.ConvertScaleAbs(buffers.Trans16S3C1, buffers.Trans8U3C,(scaleIn*1.0/256),0) # passer en valeur absolue et en 8 bits
+	cv.ConvertScaleAbs(buffers.Trans16S3C2, buffers.Trans8U3C2,(scaleIn*1.0/256),0); 
+
+	#opencv_core.cvConvertScale(iplImgTransGx, iplImg8UC3_Gx,1.0/256,64); // didactique - pour visualiser les fronts haut et bas renvoyés par Sobel 
+	#opencv_core.cvConvertScale(iplImgTransGy, iplImg8UC3_Gy,1.0/256,64); 
+	# le shift (dernière valeur de la fonction) fixe le niveau moyen de l'image - utiliser < 128 pour éviter image trop blanche... 
+
+	#opencv_core.cvConvertScale(iplImgTransGx, iplImgTransGx,1.0/256,128); // non - passer par la valeur absolue et image 8U 
+	#opencv_core.cvConvertScale(iplImgTransGy, iplImgTransGx,1.0/256,128); 
+
+	#opencv_core.cvAdd(iplImgTransGx, iplImgTransGy, iplImgDest,null); 
+	cv.Add(buffers.Trans8U3C, buffers.Trans8U3C2, iplImgIn,None)
+
+	#--- release CvMat -- pas nécessaire en Python.. 
+	#opencv_core.cvReleaseMat(matrix2D.ptr()); // libère mémoire utilisée par CvMat
+	#matrix2D.release() # alternative - ok 
+
+	#--- renvoie l'image attendue --- 
+
+	return iplImgIn 
+
+########## blobs (contours de formes) #########
 
 #=========== Classe Blob =================
 class Blob: # cette classe rassemble dans un meme objet toutes les caractéristiques utiles d'un blob = pourtour de forme
@@ -586,7 +808,7 @@ def selectBlobsWH(blobsIn,ratioWHTestIn, deltaIn):
 	
 	return blobsOut # renvoie la list des blobs sélectionnes
 
-############# convexite ######################
+############# analyse convexite de contours ######################
 
 #=========== Classe Blob =================
 class ConvexityDefect: # cette classe rassemble dans un meme objet toutes les caractéristiques utiles d'un ConvexityDefect = un creux.. 
