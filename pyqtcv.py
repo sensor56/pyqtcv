@@ -31,6 +31,10 @@ gobject.threads_init() # idem..
 # math 
 import numpy as np
 
+#--- variables de module utiles
+brightnessValue=0
+contrastValue=0
+
 # --- classes utiles (à placer avant la classe principale) --- 
 class IplToQImage(QImage):
 # IplQImage est une classe qui transforme un iplImage (OpenCV) en un QImage (Qt)
@@ -142,6 +146,19 @@ def display(iplImageIn, qLabelIn):
 ## fin display 
 """
 
+############### fonctions generales Buffers #################
+
+def area(*arg):
+	
+	if len(arg)==0: # buffer RGB par defaut
+		iplImgIn=buffers.RGB
+	elif len(arg)==1: # si iplImage passe en parametre
+		iplImgIn=arg[0]
+	
+	areaOut=iplImgIn.width*iplImgIn.height
+	
+	return areaOut
+
 ############### gestion des buffers et images entre-elles ##############
 
 #-- copie image
@@ -178,8 +195,12 @@ def getMemory(*arg):
 	
 # fin remember
 
+def restore(*arg):
+	
+	getMemory(*arg) # appelle fonction avec meme arg ou rien.. 
+	
 
-############## fonctions de traitement des pixels #####################
+############## operation sur canaux couleurs ###############
 
 #---- conversion gray d'une image RGB 3 canaux ----
 def gray(*arg):
@@ -198,6 +219,214 @@ def gray(*arg):
 	#return(iplImgIn) # pas indispensable - l'image reçue est modifiée 
 
 ##--- fin gray()
+
+#---- extraction des 3 canaux d'une image RGB ----
+def extractRGB(*arg):
+	
+	if len(arg)==0: # buffer RGB par defaut
+		iplImgIn=buffers.RGB
+	elif len(arg)==1: # si iplImage passe en parametre
+		iplImgIn=arg[0]
+	
+	cv.Split(iplImgIn, buffers.B, buffers.G, buffers.R, None) # extrait les 3 canaux R G B : attention inversion RGB 
+	# les canaux sont en copie dans les buffers G, G et B 
+
+##--- fin extractRGB 
+
+def getBufferR(*arg):
+	
+	if len(arg)==0: # buffer RGB par defaut
+		iplImgIn=buffers.RGB
+	elif len(arg)==1: # si iplImage passe en parametre
+		iplImgIn=arg[0]
+	
+	fill(buffers.Trans8U1C, 0) # rempli le buffer monocanal en noir
+	
+	cv.Merge(buffers.Trans8U1C,buffers.Trans8U1C, buffers.R,None, iplImgIn)
+
+def getBufferG(*arg):
+	
+	if len(arg)==0: # buffer RGB par defaut
+		iplImgIn=buffers.RGB
+	elif len(arg)==1: # si iplImage passe en parametre
+		iplImgIn=arg[0]
+	
+	fill(buffers.Trans8U1C, 0) # rempli le buffer monocanal en noir
+	
+	cv.Merge(buffers.Trans8U1C,buffers.G, buffers.Trans8U1C,None, iplImgIn)
+
+def getBufferB(*arg):
+	
+	if len(arg)==0: # buffer RGB par defaut
+		iplImgIn=buffers.RGB
+	elif len(arg)==1: # si iplImage passe en parametre
+		iplImgIn=arg[0]
+	
+	fill(buffers.Trans8U1C, 0) # rempli le buffer monocanal en noir
+	
+	cv.Merge(buffers.B,buffers.Trans8U1C, buffers.Trans8U1C,None, iplImgIn)
+
+def getBufferGray(*arg):
+	# iplImgIn
+	
+	if len(arg)==0: # buffer RGB par defaut
+		iplImgIn=buffers.RGB
+	elif len(arg)==1: # si iplImage passe en parametre
+		iplImgIn=arg[0]
+	
+	cv.CvtColor(buffers.Gray, iplImgIn, cv.CV_GRAY2RGB) # rebascule le buffer Gray en RGB 
+
+def mergeRGB(*arg):
+	# iplImgIn, iplImgRIn,iplImgGIn,iplImgBIn
+	
+	if len(arg)==0: # buffer RGB par defaut
+		iplImgDestIn=buffers.RGB
+		iplImgBIn=buffers.B
+		iplImgGIn=buffers.G
+		iplImgRIn=buffers.R
+	elif len(arg)==1: # si iplImage passe en parametre
+		iplImgDestIn=arg[0]
+		iplImgBIn=buffers.B
+		iplImgGIn=buffers.G
+		iplImgRIn=buffers.R
+	else: # si 4 parametres
+		iplImgDestIn=arg[0]
+		iplImgBIn=arg[3]
+		iplImgGIn=arg[2]
+		iplImgRIn=arg[1]
+		
+	cv.Merge(iplImgBIn,iplImgGIn,iplImgRIn, None, iplImgDestIn) # reconstruction IplImage destination à partir des canaux départ.. - attention inversion RGB
+
+############## fonctions de traitement des pixels #####################
+
+#--- setBrightnessContrast : fixe le contraste et la luminosité ------
+def setBrightnessContrast(*arg) :
+	#iplImgIn, brightnessIn, contrastIn
+	
+	global contrast, brightness # variables de module 
+	
+	if len(arg)==2: # buffer RGB par defaut
+		iplImgIn=buffers.RGB
+		brightnessIn=float(arg[0])
+		contrastIn=float(arg[1])
+	else: # 
+		iplImgIn=arg[0]
+		brightnessIn=float(arg[1])
+		contrastIn=float(arg[2])
+
+	# la fonction reçoit l'objet IplImage source et les valeurs du contraste et de la luminsoté
+	# contrast entre -128 et +127 
+	# brightnesse entre -128 et + 127
+	
+	#-- on considère que l'image reçue est 8 bits - 3 canaux 
+	matrix=cv.CreateMat(1, 256, cv.CV_8UC3) # crée un CvMat avec taille de donnée unitaire 8 bits - 3 canaux
+	#-- on crée un CvMat 8 bits / 3 canaux   car le CvMat doit avoir le même nombre de canaux et le même nombre bit (depth) 
+	# que le  IplImage source utilisé avec la fonction cvLUT()
+	
+	#---- calcul des coefficients pour le contraste et la brillance
+	#--- pour chaque pixel, on aura : I= (a x I) + b
+	
+	if contrastIn>0:
+		
+		delta = (127.0*contrastIn) / 128.0
+		
+		a = 255.0 / ( 255.0-(delta*2.0) )
+		b = a * ( brightnessIn-delta)
+		
+	else:
+		
+		delta = ((-128.0)*contrastIn) / 128.0
+		
+		a = ( 256.0 -(delta*2.0) ) / 255.0
+		b = ( a * brightnessIn ) + delta
+	
+	#print delta # debug
+	#print a # debug
+	#print b # debug
+	
+	
+	#--- met à jour le Cvmat avec les nouvelles valeurs calculées 
+	 
+	for i in range(256):
+		
+		value = round( ((a*i)+b) ) # récupère valeur entière 
+		print value # debug 
+		value=constrain(value,0,255) # équiv constrain 0-255
+		print value # debug
+		
+		cv.Set1D(matrix, i, cv.ScalarAll(value)) # remplit les 3 canaux du CvMat à l'index voulu
+		
+
+	# ---- application du cvLUT en se basant sur le CvMat défini
+	
+	# cvLUT(opencv_core.CvArr src, opencv_core.CvArr dst, opencv_core.CvArr lut) 
+	cv.LUT( iplImgIn, iplImgIn, matrix )
+	
+	# cvLUT remplace dans l'image source chaque pixel par la valeur présente à chaque indice du tableau 1D CvMat utilisé
+	# le résultat est mis dans la destination 
+	# ceci limite les opérations au calcul de 255 valeurs au lieu de faire widthxheight calculs identiques
+
+	#-- met à jour les variables de module contrast et brightness
+	contrastValue=contrastIn
+	brightnessValue=brightnessIn
+
+	#--- renvoie l'image modifiée --- 
+
+	return iplImgIn
+	
+
+##--- fin fonction setBrightnessContrast
+
+def brightness(*args):
+	
+	global contrastValue # variable de module 
+	
+	if len(args)==1:
+		iplImgIn=buffers.RGB # buffer RGB par défaut
+		brightnessIn=args[0]
+	else : # si ipliImgIn, brightnessIn
+		iplImgIn=args[0]
+		brightnessIn=args[1]
+
+	setBrightnessContrast(iplImgIn,brightnessIn, contrastValue) # fixe la luminosité - contrast inchangé
+
+def contrast(*args):
+	
+	global brightnessValue # variable de module 
+	
+	if len(args)==1:
+		iplImgIn=buffers.RGB # buffer RGB par défaut
+		contrastIn=args[0]
+	else : # si ipliImgIn, brightnessIn
+		iplImgIn=args[0]
+		contrastIn=args[1]
+	
+	print brightness
+	setBrightnessContrast(iplImgIn,brightnessValue, contrastIn) # fixe le contraste - luminosité inchangée
+
+#--- fonction fill : remplit tous les pixels d'une Image / d'un canal avec une même valeur 
+def fill(*arg):
+	
+	# iplImage, couleur ou IplImage, r,g,b
+	
+	if len(arg)==1: # buffer RGB par defaut
+		iplImgIn=buffers.RGB
+		if len(arg[0])==3: # si format (r,g,b)
+			colorIn=(arg[0][2], arg[0][1], arg[0][0]) # inversion (r,g,b) vers (b,g,r)
+		else: colorIn=arg[0] # si format gray
+	elif len(arg)==2: # si iplImage passe en parametre
+		iplImgIn=arg[0]
+		colorIn=arg[1]
+	elif len(arg)==3: # si r,g,b seul 
+		iplImgIn=buffers.RGB
+		colorIn=(arg[2], arg[1], arg[0]) # couleur RGB - inversion B et R
+	#elif len(arg)==4: # si iplImage passe en parametre
+	else: # pour eviter erreur before assignment
+		iplImgIn=arg[0]
+		colorIn=(arg[3], arg[2], arg[1]) # couleur RGB - inversion B et R
+
+	cv.Set(iplImgIn, colorIn) # rempli tous les pixels de l'image  avec les valeurs du scalaire - pas besoin de passer par un scalaire
+	# adapter la couleur au nombre de canaux de l'image... 
 
 #---- effet miroir vertical / horizontal ou les 2 ---
 VERTICAL=0
@@ -222,6 +451,70 @@ def invert(*arg):
 	cv.SubRS(iplImgIn, myRGB,iplImgIn,None) # soustraction inverse du scalaire pour tous les pixels
 
 ##--- fin invert()
+
+#-- fonction de multiplication des canaux d'une image RGB -- 
+def multiply(*arg):
+	# iplImgIn, coeffRIn, coeffGIn, coeffBIn
+	
+	if len(arg)==3: # buffer RGB par defaut
+		iplImgIn=buffers.RGB
+		coeffRIn=float(arg[2]) # inversion R et B 
+		coeffGIn=float(arg[1])
+		coeffBIn=float(arg[0])
+	else: # si iplImage passe en parametre
+		iplImgIn=arg[0]
+		coeffRIn=float(arg[3]) # inversion R et B 
+		coeffGIn=float(arg[2])
+		coeffBIn=float(arg[1])
+
+	# Passer par image en 32F pour supporter coeff float !!
+	# cv.Mul(iplImgIn, Trans8U3C, iplImgIn, 1) # multiplie les 2 images
+
+	#--- conversion de l'image source en 16S 
+	#cv.ConvertScale(iplImgSrc, iplImgSrc16S, 256.0, -32768); // convertit 8U en 16S 
+	cv.ConvertScale(iplImgIn, buffers.Trans16S3C, 1, 0) # convertit 8U en 16S mais en gardant les valeurs 8U
+
+	# ---- application d'un coefficient à chaque canal ---- 
+	# calcul séparément pour chaque pixel R x coeff R , G x coeff G, B x coeff B
+
+	#--- création de 3 matrices de float contenant les coeff RGB à appliquer :
+	cv.Set(buffers.Trans32F3C, (coeffRIn, coeffGIn, coeffBIn)) # remplit tous les pixels du IplImage avec le scalaire (coeffB, coeffG, coeffR)
+	# pour pouvoir stocker des float, il faut que l'image soit une 32F !!
+	# attention coeff R et B PAS inversés  ici 
+
+	print "Val(0,0) ="+str(cv.Get2D(buffers.Trans32F3C, 0,0)[0]) # lit la valeur... utilise fonction .val(i) du scalar renvoyé par cvGet2D
+	#[0] renvoie canal Bleu, [1] le canal vert et [2] le canal Rouge
+
+	print "Val(0,0) ="+str(cv.Get2D(buffers.Trans16S3C, 0,0)[2]) # lit la valeur... utilise fonction .val(i) du scalar renvoyé par cvGet2D
+	cv.Mul(buffers.Trans16S3C, buffers.Trans32F3C, buffers.Trans16S3C, 1) # multiplie les 2 images 
+	# ce qui réalise pour chaque pixel : R x coeff R , G x coeff G, B x coeff B
+	#-- nb ; pour la multiplication avec des float, il faut que l'image soit une 32F
+
+	#conversion d'un Objet Ipl16S en 8U mais sans changer la valeur
+	# opencv_core.cvConvertScale(iplImg16S,iplImg8U,(1.0/256.0),128);  conversion 16S vers 8U avec adaptation valeur pleine échelle 
+	cv.ConvertScale(buffers.Trans16S3C,buffers.Trans8U3C,1,0) # sans changer la valeur
+
+	cv.Copy(buffers.Trans8U3C, iplImgIn) # copie l'image Ipl en entrée dans l'image depart
+
+	return iplImgIn
+
+
+""""
+#-- flou avec blur -- attention fonction cv2 
+def blur(*args):
+	# iplImgIn, ksizeIn
+
+	# gestion de parametres 
+	if len(args)==0: # si aucun parametre
+		iplImgIn=buffers.RGB
+		ksizeIn=3
+	else: # si forme complète - else pour eviter erreur "before assignment"
+		iplImgIn=args[0]
+		ksizeIn=args[1]
+
+	# fonction cv2
+	blur( iplImgIn, iplImgIn, (ksizeIn,ksizeIn), (-1,-1), BORDER_DEFAULT) # flou avec fonction cv2
+"""
 
 #-- fonction de floutage d'une image RGB -- 
 def smooth(*arg):
@@ -264,6 +557,7 @@ def threshold(*arg):
 
 ##--- fin threshold()
 
+#--- fonction "mixeur RGB" pour filtrage par couleur --- 
 #def mixerRGB (iplImgRGBIn, coeffRIn, coeffGIn, coeffBIn, canalOut, grayOut, debugIn):
 def mixerRGB (iplImgRGBIn, coeffRIn, coeffGIn, coeffBIn, grayOut):
 	# iplImgRGBIn : image RGB In (iplImage)
@@ -330,6 +624,77 @@ def mixerRGB (iplImgRGBIn, coeffRIn, coeffGIn, coeffBIn, grayOut):
 
 # fin mixerRGB
 
+#---- mixer RGB Gray --- 
+def mixerRGBGray(iplImgRGBIn, coeffRIn, coeffGIn, coeffBIn): 
+	
+	mixerRGB (iplImgRGBIn, coeffRIn, coeffGIn, coeffBIn, True) # fonction mixerRGB avec flag Gray à True
+
+
+# somme de la valeur de tous les pixels d'une image
+def sumRGB(*arg):
+	
+	if len(arg)==0: # buffer RGB par defaut
+		iplImgIn=buffers.RGB
+	elif len(arg)==1: # si iplImage passe en parametre
+		iplImgIn=arg[0]
+	
+	sumScalar=cv.Sum(iplImgIn)
+	
+	#print list(sumScalar) # debug
+	
+	sumRGBValue=sumScalar[0]+sumScalar[1]+sumScalar[2]
+	
+	return long(sumRGBValue)
+
+# somme de la valeur de tous les pixels R d'une image
+def sumR(*arg):
+	
+	if len(arg)==0: # buffer RGB par defaut
+		iplImgIn=buffers.RGB
+	elif len(arg)==1: # si iplImage passe en parametre
+		iplImgIn=arg[0]
+	
+	sumScalar=cv.Sum(iplImgIn)
+	
+	#print list(sumScalar) # debug
+	
+	sumRValue=sumScalar[2] # rouge = indice 2 du scalaire
+	
+	return long(sumRValue)
+
+# somme de la valeur de tous les pixels G d'une image
+def sumG(*arg):
+	
+	if len(arg)==0: # buffer RGB par defaut
+		iplImgIn=buffers.RGB
+	elif len(arg)==1: # si iplImage passe en parametre
+		iplImgIn=arg[0]
+	
+	sumScalar=cv.Sum(iplImgIn)
+	
+	#print list(sumScalar) # debug
+	
+	sumGValue=sumScalar[1] 
+	
+	return long(sumGValue)
+	
+
+# somme de la valeur de tous les pixels B d'une image
+def sumB(*arg):
+	
+	if len(arg)==0: # buffer RGB par defaut
+		iplImgIn=buffers.RGB
+	elif len(arg)==1: # si iplImage passe en parametre
+		iplImgIn=arg[0]
+	
+	sumScalar=cv.Sum(iplImgIn)
+	
+	#print list(sumScalar) # debug
+	
+	sumBValue=sumScalar[0] # bleu = indice 0 du scalaire
+	
+	return long(sumBValue)
+	
 
 
 """ # probleme avec self
@@ -524,7 +889,7 @@ def sobel2(*args):
 		iplImgIn=args[0]
 		ksizeIn=args[1]
 		scaleIn=args[2]
-		coeffNormIn=args[3]
+		coeffNormIn=float(args[3])
 	
 	#--- ici, on calcule d'une part le Sobel Gx puis le Sobel Gy
 	#--- le passage par les 2 canaux séparés donne un bien meilleur résultat que Sobel 1,1 pour x et y simultanés 
@@ -643,6 +1008,27 @@ def sobel2(*args):
 	#--- renvoie l'image attendue --- 
 
 	return iplImgIn 
+	
+
+#-- filtre de Scharr -- 
+def scharr(*args):
+	# iplImgIn, scaleIn
+
+	# gestion de parametres 
+	if len(args)==0: # si aucun parametre
+		iplImgIn=buffers.RGB
+		scaleIn=1
+	else: # si forme complète - else pour eviter erreur "before assignment"
+		iplImgIn=args[0]
+		scaleIn=args[1]
+	
+	#-- le filtre de SCHARR est une variante du filtre de Sobel avec un noyau un peu différent qui accentue davantage le contour
+	# disponible directement par la fonction cvSobel en utilisant le ksize = CV_SCHARR (= -1)
+	
+	sobel(iplImgIn, cv.CV_SCHARR, scaleIn) # sobel avec ksize=cv.CV_SCHARR
+	
+	return iplImgIn
+
 
 ########## blobs (contours de formes) #########
 
@@ -952,3 +1338,15 @@ def calculAngleAlKashi(adj1, adj2, opp):
 	
 	#----- renvoi de la valeur calculée ----
 	return calculAngle
+
+############################# divers utiles #########################
+#-- constrain(x,a,b)
+def constrain(x,valMin,valMax):
+	if x < valMin :
+			return valMin
+
+	elif valMax < x :
+			return valMax
+
+	else :
+			return x
