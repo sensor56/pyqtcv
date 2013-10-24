@@ -740,7 +740,7 @@ def captureImage(*args): # capture une nouvelle image issue de la webcam
 def initWebcamGS(indexCamIn,widthCaptureIn, heightCaptureIn, fpsIn):
 	
 	print ('''v4l2src device=/dev/video'''+str(indexCamIn) 
-	+'''! video/x-raw-rgb,width='''+str(widthCaptureIn)+''',height='''+str(heightCaptureIn)
+	+''' ! video/x-raw-rgb,width='''+str(widthCaptureIn)+''',height='''+str(heightCaptureIn)
 	+''',framerate='''+str(fpsIn)+'''/1 ! appsink name=sink emit-signals=true'''
 	)
 	
@@ -766,7 +766,7 @@ def readDataBufferGS(bufIn): # appelée par le code principal - la fonction reç
 	
 	# numpy des données
 	pixels = np.frombuffer(bufIn.data, dtype=np.uint8)
-	pixels=pixels.reshape((320,240,3))
+	pixels=pixels.reshape((buffers.RGB.width,buffers.RGB.height,3)) # on utilise la taille du buffer RGB par defaut 
 
 	#print type(self.pixels)
 	#print self.pixels
