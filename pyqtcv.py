@@ -75,6 +75,13 @@ class Point: # cette classe definit un point par x et y
 #----- fonction d'initialisation / création des buffers OpenCV utiles	
 def allocate(widthIn, heightIn):
 	
+	allocateBuffers(widthIn, heightIn) # initialise buffers
+	allocateMemory(widthIn, heightIn) # initialise Memory 1 meme taille
+	allocateMemory2(widthIn, heightIn) # initialise Memory 1 meme taille
+	
+
+def allocateBuffers(widthIn, heightIn):
+	
 	"""
 	global Buffer
 	global BufferR, BufferG, BufferB
@@ -93,6 +100,7 @@ def allocate(widthIn, heightIn):
 	buffers.RGB=cv.CreateImage(mySize, cv.IPL_DEPTH_8U, 3) # buffer principal 3 canaux 8 bits non signés - RGB --
 	
 	buffers.Memory=cv.CreateImage(mySize, cv.IPL_DEPTH_8U, 3) # buffer principal 3 canaux 8 bits non signés - RGB --
+	buffers.Memory2=cv.CreateImage(mySize, cv.IPL_DEPTH_8U, 3) # buffer principal 3 canaux 8 bits non signés - RGB --
 	
 	#--- crée 3 buffers 1 canal 8 bits non signés = 1 canal par couleur 
 	buffers.R = cv.CreateImage(mySize, cv.IPL_DEPTH_8U, 1) #1 canal - canal rouge
@@ -136,6 +144,19 @@ def allocate(widthIn, heightIn):
 	
 	
 ##-- fin de la déclaration des buffers utiles 
+
+def allocateMemory(widthIn, heightIn):
+	
+	mySize=(widthIn, heightIn)
+	
+	buffers.Memory=cv.CreateImage(mySize, cv.IPL_DEPTH_8U, 3) # buffer principal 3 canaux 8 bits non signés - RGB --
+
+def allocateMemory2(widthIn, heightIn):
+	
+	mySize=(widthIn, heightIn)
+	
+	buffers.Memory2=cv.CreateImage(mySize, cv.IPL_DEPTH_8U, 3) # buffer principal 3 canaux 8 bits non signés - RGB --
+
 
 """ # pour éviter problemes : rester avec qImage et qPixmap self. 
 #--- affichage d'un iplImage dans un QLabel 
