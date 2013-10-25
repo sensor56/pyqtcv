@@ -65,6 +65,7 @@ class Point: # cette classe definit un point par x et y
 	
 	def __init__(self, *args ): # forme (x,y) ou x,y
 		
+		
 		if len(args)==1: # si recoit tuple (x,y)
 			self.x=args[0][0]
 			self.y=args[0][1]
@@ -454,8 +455,18 @@ VERTICAL=0
 HORIZONTAL=1
 BOTH=2
 
-def flip (iplImgIn, flipModeIn): 
+def flip (*arg):
+	#iplImgIn, flipModeIn
 	
+	if len(arg)==1: # buffer RGB par defaut
+		iplImgIn=buffers.RGB
+		flipModeIn==arg[0] 
+		
+	#elif len(arg)==2: # si iplImage passe en parametre
+	else: # pour eviter erreur
+		iplImgIn=arg[0] 
+		flipModeIn=arg[1] 
+		
 	cv.Flip(iplImgIn, iplImgIn, flipModeIn) # flip vertical : applique effet miroir vertical au Buffer 
 	
 ##--- fin flip()
@@ -1139,7 +1150,7 @@ def detectBlobs(*arg):
 			centroid_y=int(m01/m00) # calcule y du centre
 			centroidPoint=(centroid_x, centroid_y) # centre du blob
 		else: 
-			centroidPoint=[(0,0)] # centre du blob
+			centroidPoint=(0,0) # centre du blob
 		
 		#rect=[(0,0),(0,0),w,h] # rectangle entourant le blob - coin sup gauche - coin inf droit 
 		bound_rect = cv.BoundingRect(list(contours)) # récupère le rectangles encadrant le contour courant - renvoit x,y,w,h
@@ -1154,7 +1165,7 @@ def detectBlobs(*arg):
 		# list de spoints du contour
 		points=list(contours) # liste des points du contour courant
 		
-		blobsList.append(Blob(indiceContour, contour, area, lengthArc, length, centroidPoint, rect, points)) # ajoute un objet Blob à la list
+		blobsList.append(Blob(indiceContour, contour, area, lengthArc, length, Point(centroidPoint), rect, points)) # ajoute un objet Blob à la list
 		
 		
 		contours = contours.h_next() # passe au contour suivant - remarquer la forme contours=contours.h_next et pas seulement contours.h_next
